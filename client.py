@@ -1,6 +1,6 @@
 from copy import deepcopy
 from typing import Sequence
-from main import Board, NextPieceDisplay, ScoreDisplay
+from main import Board, PieceDisplay, ScoreDisplay
 import pygame as pg
 
 
@@ -49,42 +49,6 @@ class TetrisClientV1:
     def find_permutations(self, board: Board):
         permutations = []
 
-        ## APPROACH 1
-
-        # working_board = board.copy()
-        # # force active piece to left side of board
-        # # minimum moves to ensure a piece is as far left as it can go is 9
-        # movements: list[int | str] = ["LEFT" for _ in range(9)]
-        # working_board.input(movements)
-        # for x in range(10):
-        #     for r in range(4):
-        #         # add all rotational permutations of the active piece
-        #         temp_board = working_board.copy()
-        #         temp_board.input("HARDDROP")
-        #         temp_movements = deepcopy(movements)
-        #         temp_movements.append("HARDDROP")
-        #         permutations.append(
-        #             {
-        #                 "moves": temp_movements,
-        #                 "board": temp_board,
-        #             }
-        #         )
-        #         if not min(
-        #             working_board.input("ROT_ANTICLOCKWISE"), key=lambda i: bool(i)
-        #         ):
-        #             # break if rotation fails
-        #             break
-        #         else:
-        #             movements.append("ROT_ANTICLOCKWISE")
-        #     # move piece to the right
-        #     if not min(working_board.input("RIGHT"), key=lambda i: bool(i)):
-        #         # break if movement fails
-        #         break
-        #     else:
-        #         movements.append("RIGHT")
-
-        ## APPROACH 2
-
         hardleft = ["LEFT" for _ in range(self.board.width)]
 
         # each possible column
@@ -96,16 +60,25 @@ class TetrisClientV1:
                 ["ROT_ANTICLOCKWISE"],
                 ["ROT_CLOCKWISE"],
                 ["ROT_CLOCKWISE", "ROT_CLOCKWISE"],
+                ["HOLD"],
+                ["HOLD", "ROT_ANTICLOCKWISE"],
+                ["HOLD", "ROT_CLOCKWISE"],
+                ["HOLD", "ROT_CLOCKWISE", "ROT_CLOCKWISE"],
             ]:
-                moves = column + moveset + ["HARDDROP"]
                 temp_board = board.copy()
                 # if none of the moves failed, add this permutation
-                temp_board.input(hardleft)
-                # print(temp_board.input(moves))
-                if min(temp_board.input(moves), key=lambda i: bool(i)):
-                    permutations.append(
-                        {"board": temp_board, "moves": hardleft + moves}
-                    )
+                if min(temp_board.input(moveset), key=lambda i: bool(i), default=True):
+                    temp_board.input(hardleft)
+                    if min(
+                        temp_board.input(column), key=lambda i: bool(i), default=True
+                    ):
+                        temp_board.input("HARDDROP")
+                        permutations.append(
+                            {
+                                "board": temp_board,
+                                "moves": moveset + hardleft + column + ["HARDDROP"],
+                            }
+                        )
 
         # remove any duplicate permutations
         perm_board_states = [q["board"].board for q in permutations]
@@ -118,12 +91,14 @@ class TetrisClientV1:
 
 if __name__ == "__main__":
     pg.init()
-    win = pg.display.set_mode((500, 700), pg.RESIZABLE)
+    win = pg.display.set_mode((700, 700), pg.RESIZABLE)
     clock = pg.time.Clock()
-    client = TetrisClientV1(board=Board(width=20, height=30))
+    client = TetrisClientV1(board=Board())
     # client = TetrisClientV1(Board())
     elements = pg.sprite.Group(
-        NextPieceDisplay(client.board), ScoreDisplay(client.board)
+        PieceDisplay(client.board),
+        PieceDisplay(client.board, type="saved"),
+        ScoreDisplay(client.board),
     )
     # client.find_permutations(client.board)
     while True:
@@ -134,6 +109,7 @@ if __name__ == "__main__":
                 quit()
 
         win.fill("gray")
+        print(client.board.saved_piece)
 
         client.move()
         client.update()

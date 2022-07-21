@@ -35,10 +35,12 @@ class Board(pg.sprite.Sprite):
             [None for x in range(self.width)] for y in range(self.height)
         ]
         super().__init__()
-        self.current_piece: list[tuple[int, int]] | None = None
+        self.active_coords: list[tuple[int, int]] | None = None
+        self.saved_piece: dict | None = None
         self.score: int = 0
         self.difficult_combo = 0
         self.total_pieces = 0
+        self.hold_used = False
         self.pick_next_piece()
         self.rect: pg.rect.Rect = pg.Rect(0, 0, 0, 0)
         self.update()
@@ -150,29 +152,13 @@ class Board(pg.sprite.Sprite):
                 scoring[cleared_lines] * (1.5 if self.difficult_combo >= 2 else 1)
             )
 
-        if not self.current_piece:
-            self.current_piece = []
-            # check for collisions in the spawning area
-            for rownum, row in enumerate(self.next_piece["shape"]):
-                for colnum, cell in enumerate(row):
-                    if cell and self.board[rownum][colnum + int(self.width / 2) - 1]:
-                        self.game_over()
-                        return
-            # spawn new piece
-            for rownum, row in enumerate(self.next_piece["shape"]):
-                for colnum, cell in enumerate(row):
-                    if cell:
-                        self.board[rownum][
-                            colnum + int(self.width / 2) - 1
-                        ] = self.next_piece["colour"]
-                        self.current_piece.append(
-                            (rownum, colnum + int(self.width / 2) - 1)
-                        )
+        if not self.active_coords:
+            self.spawn(self.next_piece)
             self.total_pieces += 1
-
             self.pick_next_piece()
+            self.hold_used = False
 
-        if tick and self.current_piece:
+        if tick and self.active_coords:
             self.input("GRAVITY")
 
     def input(self, key: int | str | Sequence[int | str], update: bool = True):
@@ -194,7 +180,7 @@ class Board(pg.sprite.Sprite):
             if key == "GRAVITY":
                 verti += 1
             if key == "HARDDROP" or key == pg.K_SPACE:
-                while self.current_piece:
+                while self.active_coords:
                     self.input("GRAVITY", update=False)
                     self.score += 2
             if key == "ROT_CLOCKWISE" or key == pg.K_UP or key == pg.K_x:
@@ -202,13 +188,34 @@ class Board(pg.sprite.Sprite):
             if key == "ROT_ANTICLOCKWISE" or key == pg.K_z:
                 rot += 1
 
-            if self.current_piece:
+            if (
+                (key == "HOLD" or key == pg.K_c)
+                and self.active_coords
+                and not self.hold_used
+            ):
+                self.hold_used = True
+                old_piece = self.current_piece
+
+                # wipe the old piece from the board
+                for coord in self.active_coords:
+                    self.board[coord[0]][coord[1]] = None
+
+                if self.saved_piece:
+                    self.spawn(self.saved_piece)
+                else:
+                    self.spawn(self.next_piece)
+                    self.total_pieces += 1
+                    self.pick_next_piece()
+
+                self.saved_piece = old_piece
+
+            if self.active_coords:
                 # Rotate the piece if we need to
                 if rot:
                     self.rotate(rot)
                 # Check each tile to see if we can move
                 can_move = True
-                for coord in self.current_piece:
+                for coord in self.active_coords:
                     if (
                         coord[0] + verti >= self.height
                         or coord[0] + verti < 0
@@ -220,7 +227,7 @@ class Board(pg.sprite.Sprite):
                     elif (
                         self.board[coord[0] + verti][coord[1] + horiz]
                         and (coord[0] + verti, coord[1] + horiz)
-                        not in self.current_piece
+                        not in self.active_coords
                     ):
                         can_move = False
                         break
@@ -228,20 +235,20 @@ class Board(pg.sprite.Sprite):
                 # If we can move, update self.current_piece and self.board
                 if can_move:
                     repositioned_piece: list[tuple[int, int]] = []
-                    for coord in self.current_piece:
+                    for coord in self.active_coords:
                         self.board[coord[0] + verti][coord[1] + horiz] = self.board[
                             coord[0]
                         ][coord[1]]
                         if (
                             not (coord[0] - verti, coord[1] - horiz)
-                            in self.current_piece
+                            in self.active_coords
                         ):
                             self.board[coord[0]][coord[1]] = None
                         repositioned_piece.append((coord[0] + verti, coord[1] + horiz))
-                    self.current_piece = repositioned_piece
+                    self.active_coords = repositioned_piece
                     successes.append(True)
                 elif key == "GRAVITY":
-                    self.current_piece = None
+                    self.active_coords = None
 
                 if not can_move:
                     successes.append(False)
@@ -256,7 +263,7 @@ class Board(pg.sprite.Sprite):
         return successes
 
     def rotate(self, rotation):
-        if not self.current_piece:
+        if not self.active_coords:
             return
 
         # convert negative rotations into positive
@@ -266,22 +273,18 @@ class Board(pg.sprite.Sprite):
         rotation %= 4
 
         for _ in range(abs(rotation)):
-            rowoffset = min(self.current_piece, key=lambda x: x[0])[0]
-            coloffset = min(self.current_piece, key=lambda x: x[1])[1]
+            rowoffset = min(self.active_coords, key=lambda x: x[0])[0]
+            coloffset = min(self.active_coords, key=lambda x: x[1])[1]
 
-            rowheight = max(self.current_piece, key=lambda x: x[0])[0] - rowoffset + 1
-            colwidth = max(self.current_piece, key=lambda x: x[1])[1] - coloffset + 1
+            rowheight = max(self.active_coords, key=lambda x: x[0])[0] - rowoffset + 1
+            colwidth = max(self.active_coords, key=lambda x: x[1])[1] - coloffset + 1
 
             piece_array: list[list[bool]] = [
                 [False for _ in range(colwidth)] for _ in range(rowheight)
             ]
-            for coord in self.current_piece:
+            for coord in self.active_coords:
                 piece_array[coord[0] - rowoffset][coord[1] - coloffset] = True
 
-            # piece_array = [
-            #     [piece_array[j][i] for j in range(len(piece_array))]
-            #     for i in range(len(piece_array[0]))
-            # ]
             rotated_piece = []
 
             for rowindex, row in enumerate(piece_array):
@@ -305,29 +308,59 @@ class Board(pg.sprite.Sprite):
                     break
                 elif (
                     self.board[coord[0]][coord[1]]
-                    and (coord[0], coord[1]) not in self.current_piece
+                    and (coord[0], coord[1]) not in self.active_coords
                 ):
                     can_move = False
                     break
 
             if can_move:
                 # sample colour from old piece
-                col = self.board[self.current_piece[0][0]][self.current_piece[0][1]]
-                for coord in self.current_piece:
+                col = self.board[self.active_coords[0][0]][self.active_coords[0][1]]
+                for coord in self.active_coords:
                     self.board[coord[0]][coord[1]] = None
                 for coord in rotated_piece:
                     self.board[coord[0]][coord[1]] = col
 
-                self.current_piece = rotated_piece
+                self.active_coords = rotated_piece
 
     def pick_next_piece(self):
         random.seed()
         self.next_piece = random.choice(list(self.pieces.values()))
 
+    def spawn(self, piece: dict):
+        """
+        Checks and spawns a piece if it can.
+        Sets self.current_piece to the new piece and
+        self.active_coords to the new piece's active coordinates.
+
+        piece: {
+            "shape": [[0, 1, 0], ... ],
+            "colour": "red",
+        }
+        """
+        self.active_coords = []
+        # check for collisions in the spawning area
+        for rownum, row in enumerate(piece["shape"]):
+            for colnum, cell in enumerate(row):
+                if cell and self.board[rownum][colnum + int(self.width / 2) - 1]:
+                    self.game_over()
+                    return
+        self.current_piece = piece.copy()
+        # spawn new piece
+        for rownum, row in enumerate(piece["shape"]):
+            for colnum, cell in enumerate(row):
+                if cell:
+                    self.board[rownum][colnum + int(self.width / 2) - 1] = piece[
+                        "colour"
+                    ]
+                    self.active_coords.append(
+                        (rownum, colnum + int(self.width / 2) - 1)
+                    )
+
     def get_height(self):
         fixed_board = copy.deepcopy(self.board)
-        if self.current_piece:
-            for coord in self.current_piece:
+        if self.active_coords:
+            for coord in self.active_coords:
                 fixed_board[coord[0]][coord[1]] = None
         empty_lines = 0
         for row in fixed_board:
@@ -337,8 +370,8 @@ class Board(pg.sprite.Sprite):
 
     def count_holes(self):
         fixed_board = copy.deepcopy(self.board)
-        if self.current_piece:
-            for coord in self.current_piece:
+        if self.active_coords:
+            for coord in self.active_coords:
                 fixed_board[coord[0]][coord[1]] = None
         count = 0
         for rowindex, row in enumerate(fixed_board):
@@ -355,38 +388,46 @@ class Board(pg.sprite.Sprite):
     def copy(self):
         copied_obj = Board(width=self.width, height=self.height)
         copied_obj.board = copy.deepcopy(self.board)
+        copied_obj.active_coords = copy.deepcopy(self.active_coords)
         copied_obj.current_piece = copy.deepcopy(self.current_piece)
         copied_obj.next_piece = copy.deepcopy(self.next_piece)
+        copied_obj.saved_piece = copy.deepcopy(self.saved_piece)
         copied_obj.score = self.score
         copied_obj.difficult_combo = self.difficult_combo
         copied_obj.total_pieces = self.total_pieces
         return copied_obj
 
 
-class NextPieceDisplay(pg.sprite.Sprite):
-    def __init__(self, board: Board):
+class PieceDisplay(pg.sprite.Sprite):
+    def __init__(self, board: Board, type: str = "next"):
         super().__init__()
         self.board = board
+        self.type = type
         self.update()
 
     def update(self, tick=False):
         win = pg.display.get_surface()
-        self.image = pg.Surface((win.get_height() * 0.3, win.get_height() * 0.3))
+        self.image = pg.Surface((win.get_height() * 0.1, win.get_height() * 0.3))
         self.image.fill("grey")
         self.rect = self.image.get_rect()
-        self.rect.topleft = self.board.rect.topright
-        self.rect.top += 10
-        self.rect.left += 10
+        if self.type == "next":
+            self.rect.topleft = self.board.rect.topright
+            self.rect.top += 10
+            self.rect.left += 10
+        else:
+            self.rect.topright = self.board.rect.topleft
+            self.rect.top += 60
+            self.rect.right -= 10
 
         square_size = int(self.board.square_size * 2 / 3)
-
-        if self.board.next_piece:
-            for rownum, row in enumerate(self.board.next_piece["shape"]):
+        piece = self.board.next_piece if self.type == "next" else self.board.saved_piece
+        if piece:
+            for rownum, row in enumerate(piece["shape"]):
                 for colnum, cell in enumerate(row):
                     if cell:
                         pg.draw.rect(
                             self.image,
-                            self.board.next_piece["colour"],
+                            piece["colour"],
                             (
                                 int(colnum * square_size),
                                 int(rownum * square_size),
@@ -432,9 +473,14 @@ if __name__ == "__main__":
     # Setup
     WIN = pg.display.set_mode((500, 700), pg.RESIZABLE)
     clock = pg.time.Clock()
-    BOARD = Board(width=60)
+    BOARD = Board()
 
-    elements = pg.sprite.Group(BOARD, NextPieceDisplay(BOARD), ScoreDisplay(BOARD))
+    elements = pg.sprite.Group(
+        BOARD,
+        PieceDisplay(BOARD, type="next"),
+        PieceDisplay(BOARD, type="saved"),
+        ScoreDisplay(BOARD),
+    )
 
     time_since_tick = 0
     speed = 500  # milliseconds per tick
