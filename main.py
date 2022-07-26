@@ -1,4 +1,3 @@
-import copy
 import math
 from typing import Sequence
 import pygame as pg
@@ -10,37 +9,67 @@ class Board(pg.sprite.Sprite):
     Board class for containing the tetris board.
     """
 
-    def __init__(self, width: int = 10, height: int = 20):
+    def __init__(
+        self,
+        width: int = 10,
+        height: int = 20,
+        board: list[list[pg.Color | None]] | None = None,
+    ):
         self.pieces = {
             "I": {
+                "symmetery": 2,
                 "shape": [[0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0]],
                 "colour": "cyan",
             },
             "L": {
+                "symmetery": 4,
                 "shape": [[0, 1, 0], [0, 1, 0], [0, 1, 1]],
                 "colour": pg.Color("orange"),
             },
             "R": {
+                "symmetery": 4,
                 "shape": [[0, 1, 1], [0, 1, 0], [0, 1, 0]],
                 "colour": pg.Color("blue"),
             },
-            "T": {"shape": [[0, 1, 0], [1, 1, 1]], "colour": pg.Color("purple")},
-            "Z": {"shape": [[1, 1, 0], [0, 1, 1]], "colour": pg.Color("red")},
-            "S": {"shape": [[0, 1, 1], [1, 1, 0]], "colour": pg.Color("green")},
-            "O": {"shape": [[1, 1, 0], [1, 1, 0]], "colour": pg.Color("yellow")},
+            "T": {
+                "symmetery": 4,
+                "shape": [[0, 1, 0], [1, 1, 1]],
+                "colour": pg.Color("purple"),
+            },
+            "Z": {
+                "symmetery": 2,
+                "shape": [[1, 1, 0], [0, 1, 1]],
+                "colour": pg.Color("red"),
+            },
+            "S": {
+                "symmetery": 2,
+                "shape": [[0, 1, 1], [1, 1, 0]],
+                "colour": pg.Color("green"),
+            },
+            "O": {
+                "symmetery": 1,
+                "shape": [[1, 1, 0], [1, 1, 0]],
+                "colour": pg.Color("yellow"),
+            },
         }
+        # self.pieces = {"DOT": {"shape": [[0, 1, 0]], "colour": "cyan"}}
         self.width = width
         self.height = height
-        self.board: list[list[pg.Color | None]] = [
-            [None for x in range(self.width)] for y in range(self.height)
-        ]
-        super().__init__()
+        self.board: list[list[pg.Color | None]]
+        if board:
+            self.board = board
+        else:
+            self.board = [[None for x in range(self.width)] for y in range(self.height)]
+        win = pg.display.get_surface()
+        if win:
+            super().__init__()
         self.active_coords: list[tuple[int, int]] | None = None
         self.saved_piece: dict | None = None
         self.score: int = 0
         self.difficult_combo = 0
         self.total_pieces = 0
         self.hold_used = False
+        self.defeated = False
         self.pick_next_piece()
         self.rect: pg.rect.Rect = pg.Rect(0, 0, 0, 0)
         self.update()
@@ -128,7 +157,7 @@ class Board(pg.sprite.Sprite):
         # clear lines and score
         cleared_lines = 0
         for rowindex, row in enumerate(self.board):
-            if min([bool(x) for x in row]):
+            if all(row):
                 self.board.pop(rowindex)
                 self.board.insert(0, [None for x in range(self.width)])
                 cleared_lines += 1
@@ -137,20 +166,21 @@ class Board(pg.sprite.Sprite):
             self.difficult_combo += 1
         elif cleared_lines:
             self.difficult_combo = 0
-        scoring = {0: 0, 1: 100, 2: 300, 3: 500, 4: 800}
-        perfect_clear_scoring = {0: 0, 1: 800, 2: 1200, 3: 1800, 4: 2000}
-        # perfect clear
-        if min([bool(x) for x in self.board[-1]]):
-            # back to back tetris perfect clear
-            if self.difficult_combo >= 2:
-                self.score += 3200
+        if cleared_lines:
+            scoring = {0: 0, 1: 100, 2: 300, 3: 500, 4: 800}
+            perfect_clear_scoring = {0: 0, 1: 800, 2: 1200, 3: 1800, 4: 2000}
+            # perfect clear
+            if not any(self.board[-1]):
+                # back to back tetris perfect clear
+                if self.difficult_combo >= 2:
+                    self.score += 3200
+                else:
+                    self.score += perfect_clear_scoring[cleared_lines]
+            # normal clear
             else:
-                self.score += perfect_clear_scoring[cleared_lines]
-        # normal clear
-        else:
-            self.score += int(
-                scoring[cleared_lines] * (1.5 if self.difficult_combo >= 2 else 1)
-            )
+                self.score += int(
+                    scoring[cleared_lines] * (1.5 if self.difficult_combo >= 2 else 1)
+                )
 
         if not self.active_coords:
             self.spawn(self.next_piece)
@@ -324,7 +354,6 @@ class Board(pg.sprite.Sprite):
                 self.active_coords = rotated_piece
 
     def pick_next_piece(self):
-        random.seed()
         self.next_piece = random.choice(list(self.pieces.values()))
 
     def spawn(self, piece: dict):
@@ -343,7 +372,7 @@ class Board(pg.sprite.Sprite):
         for rownum, row in enumerate(piece["shape"]):
             for colnum, cell in enumerate(row):
                 if cell and self.board[rownum][colnum + int(self.width / 2) - 1]:
-                    self.game_over()
+                    self.defeated = True
                     return
         self.current_piece = piece.copy()
         # spawn new piece
@@ -358,26 +387,60 @@ class Board(pg.sprite.Sprite):
                     )
 
     def get_height(self):
-        fixed_board = copy.deepcopy(self.board)
+        fixed_board = board_array_copy(self.board)
         if self.active_coords:
             for coord in self.active_coords:
                 fixed_board[coord[0]][coord[1]] = None
         empty_lines = 0
         for row in fixed_board:
-            if not max([bool(x) for x in row]):
+            # if this is an empty line
+            if not any(row):
                 empty_lines += 1
         return self.height - empty_lines
 
     def count_holes(self):
-        fixed_board = copy.deepcopy(self.board)
+        fixed_board = board_array_copy(self.board)
         if self.active_coords:
             for coord in self.active_coords:
                 fixed_board[coord[0]][coord[1]] = None
         count = 0
         for rowindex, row in enumerate(fixed_board):
-            for colindex, cell in enumerate(row):
-                if rowindex >= 1:
-                    if (not cell) and (fixed_board[rowindex - 1][colindex]):
+            if rowindex >= 1:
+                for colindex, cell in enumerate(row):
+                    if (fixed_board[rowindex - 1][colindex]) and not cell:
+                        count += 1
+        return count
+
+    def count_wells(self):
+        fixed_board = board_array_copy(self.board)
+        if self.active_coords:
+            for coord in self.active_coords:
+                fixed_board[coord[0]][coord[1]] = None
+        count = 0
+        for rowindex, row in enumerate(fixed_board):
+            if rowindex >= 4 and rowindex < self.height:
+                for colindex, cell in enumerate(row):
+                    # If this cell is empty and there is a cell below and
+                    # two empty cells above and cells to either side
+                    if (
+                        (not cell)
+                        and (
+                            rowindex == self.height - 1
+                            or fixed_board[rowindex + 1][colindex]
+                        )
+                        and (not fixed_board[rowindex - 1][colindex])
+                        and (
+                            colindex == (self.width - 1)
+                            or fixed_board[rowindex - 1][colindex + 1]
+                        )
+                        and (colindex == 0 or fixed_board[rowindex - 1][colindex - 1])
+                        and (not fixed_board[rowindex - 2][colindex])
+                        and (
+                            colindex == (self.width - 1)
+                            or fixed_board[rowindex - 2][colindex + 1]
+                        )
+                        and (colindex == 0 or fixed_board[rowindex - 2][colindex - 1])
+                    ):
                         count += 1
         return count
 
@@ -386,8 +449,9 @@ class Board(pg.sprite.Sprite):
         print("GAME OVER")
 
     def copy(self):
-        copied_obj = Board(width=self.width, height=self.height)
-        copied_obj.board = copy.deepcopy(self.board)
+        copied_obj = Board(
+            width=self.width, height=self.height, board=board_array_copy(self.board)
+        )
         if self.active_coords:
             copied_obj.active_coords = self.active_coords.copy()
         copied_obj.current_piece = self.current_piece.copy()
@@ -467,6 +531,11 @@ class ScoreDisplay(pg.sprite.Sprite):
         self.rect.topright = self.board.rect.topleft
         self.rect.top += 10
         self.rect.right -= 10
+
+
+def board_array_copy(board: list[list[None | pg.Color]]):
+    # return copy.deepcopy(board)
+    return [x.copy() for x in board]
 
 
 if __name__ == "__main__":
