@@ -388,10 +388,12 @@ class Board(pg.sprite.Sprite):
     def copy(self):
         copied_obj = Board(width=self.width, height=self.height)
         copied_obj.board = copy.deepcopy(self.board)
-        copied_obj.active_coords = copy.deepcopy(self.active_coords)
-        copied_obj.current_piece = copy.deepcopy(self.current_piece)
-        copied_obj.next_piece = copy.deepcopy(self.next_piece)
-        copied_obj.saved_piece = copy.deepcopy(self.saved_piece)
+        if self.active_coords:
+            copied_obj.active_coords = self.active_coords.copy()
+        copied_obj.current_piece = self.current_piece.copy()
+        copied_obj.next_piece = self.next_piece.copy()
+        if self.saved_piece:
+            copied_obj.saved_piece = self.saved_piece.copy()
         copied_obj.score = self.score
         copied_obj.difficult_combo = self.difficult_combo
         copied_obj.total_pieces = self.total_pieces

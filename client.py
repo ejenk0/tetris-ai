@@ -38,8 +38,8 @@ class TetrisClientV1:
             # return best["moves"]
 
             perms.sort(
-                key=lambda perm: (perm["board"].score * 100)
-                / ((perm["board"].count_holes() + 1) * 50)
+                key=lambda perm: (perm["board"].score * 50)
+                / ((perm["board"].count_holes() + 1) * 100)
                 / ((perm["board"].get_height() + 1) * 1),
                 reverse=True,
             )
