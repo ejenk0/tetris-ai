@@ -1,14 +1,12 @@
-# from copy import deepcopy
+from multiprocessing import Pool
 from typing import Sequence
-from main import Board, PieceDisplay, ScoreDisplay
-import pygame as pg
 
 
-class TetrisClientV1:
+class TetrisClient:
     def __init__(
         self,
-        board: Board,
-        weights: Sequence[float] = [],
+        board,
+        weights: Sequence[float] = [0.53431391, 0.07442817, 1.00553106, 1.24080832],
     ):
         if any(weights) != None:
             self.weights = weights
@@ -18,9 +16,6 @@ class TetrisClientV1:
 
     def update(self, tick: bool = False):
         self.board.update(tick=tick)
-
-    def draw(self, surf: pg.surface.Surface):
-        pg.sprite.GroupSingle(self.board).draw(surf)
 
     def move(self):
         """
@@ -59,7 +54,7 @@ class TetrisClientV1:
             return perms[0]["moves"]
         return []
 
-    def find_permutations(self, board: Board):
+    def find_permutations(self, board):
         permutations = []
 
         hardleft = ["LEFT" for _ in range(self.board.width)]
@@ -108,32 +103,3 @@ class TetrisClientV1:
                         )
 
         return permutations
-
-
-if __name__ == "__main__":
-    pg.init()
-    win = pg.display.set_mode((700, 700), pg.RESIZABLE)
-    clock = pg.time.Clock()
-    client = TetrisClientV1(board=Board())
-    # client = TetrisClientV1(Board())
-    elements = pg.sprite.Group(
-        PieceDisplay(client.board),
-        PieceDisplay(client.board, type="saved"),
-        ScoreDisplay(client.board),
-    )
-    # client.find_permutations(client.board)
-    while True:
-        # clock.tick(4)
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                pg.quit()
-                quit()
-
-        win.fill("gray")
-
-        client.move()
-        client.update()
-        elements.update()
-        client.draw(win)
-        elements.draw(win)
-        pg.display.update()

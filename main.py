@@ -1,5 +1,8 @@
 import math
 from typing import Sequence
+import os
+
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 import pygame as pg
 import random
 
