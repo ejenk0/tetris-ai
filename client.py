@@ -1,11 +1,19 @@
-from copy import deepcopy
+# from copy import deepcopy
 from typing import Sequence
 from main import Board, PieceDisplay, ScoreDisplay
 import pygame as pg
 
 
 class TetrisClientV1:
-    def __init__(self, board: Board):
+    def __init__(
+        self,
+        board: Board,
+        weights: Sequence[float] = [],
+    ):
+        if any(weights) != None:
+            self.weights = weights
+        else:
+            self.weights = [1, 1, 1, 1]
         self.board = board
 
     def update(self, tick: bool = False):
@@ -15,6 +23,9 @@ class TetrisClientV1:
         pg.sprite.GroupSingle(self.board).draw(surf)
 
     def move(self):
+        """
+        Calculate and make best move
+        """
         self.board.input(self.calculate_move())
 
     def calculate_move(self) -> Sequence[str]:
@@ -38,9 +49,11 @@ class TetrisClientV1:
             # return best["moves"]
 
             perms.sort(
-                key=lambda perm: (perm["board"].score * 50)
-                / ((perm["board"].count_holes() + 1) * 100)
-                / ((perm["board"].get_height() + 1) * 1),
+                key=lambda perm: 1
+                * (perm["board"].score * self.weights[0])
+                / ((perm["board"].count_holes()) * self.weights[1] + 1)
+                / ((perm["board"].get_height()) * self.weights[2] + 1)
+                / ((max(perm["board"].count_wells(), 1) - 1) * self.weights[3] + 1),
                 reverse=True,
             )
             return perms[0]["moves"]
@@ -54,24 +67,38 @@ class TetrisClientV1:
         # each possible column
         for x in range(self.board.width):
             column = ["RIGHT"] * x
+            movesets = [[], ["HOLD"]]
 
-            for moveset in [
-                [],
-                ["ROT_ANTICLOCKWISE"],
-                ["ROT_CLOCKWISE"],
-                ["ROT_CLOCKWISE", "ROT_CLOCKWISE"],
-                ["HOLD"],
-                ["HOLD", "ROT_ANTICLOCKWISE"],
-                ["HOLD", "ROT_CLOCKWISE"],
-                ["HOLD", "ROT_CLOCKWISE", "ROT_CLOCKWISE"],
-            ]:
+            if board.current_piece["symmetery"] > 1:
+                movesets += [
+                    ["ROT_ANTICLOCKWISE"],
+                ]
+                if board.current_piece["symmetery"] > 2:
+                    movesets += [["ROT_CLOCKWISE"], ["ROT_CLOCKWISE", "ROT_CLOCKWISE"]]
+
+            if board.saved_piece:
+                if board.saved_piece["symmetery"] > 1:
+                    movesets += [
+                        ["HOLD", "ROT_ANTICLOCKWISE"],
+                    ]
+                    if board.saved_piece["symmetery"] > 2:
+                        movesets += [
+                            ["HOLD", "ROT_CLOCKWISE"],
+                            ["HOLD", "ROT_CLOCKWISE", "ROT_CLOCKWISE"],
+                        ]
+            else:
+                movesets += [
+                    ["HOLD", "ROT_ANTICLOCKWISE"],
+                    ["HOLD", "ROT_CLOCKWISE"],
+                    ["HOLD", "ROT_CLOCKWISE", "ROT_CLOCKWISE"],
+                ]
+
+            for moveset in movesets:
                 temp_board = board.copy()
                 # if none of the moves failed, add this permutation
-                if min(temp_board.input(moveset), key=lambda i: bool(i), default=True):
-                    temp_board.input(hardleft)
-                    if min(
-                        temp_board.input(column), key=lambda i: bool(i), default=True
-                    ):
+                if all(temp_board.input(moveset, update=False)) or not moveset:
+                    temp_board.input(hardleft, update=False)
+                    if all(temp_board.input(column, update=False)) or not column:
                         temp_board.input("HARDDROP")
                         permutations.append(
                             {
@@ -80,13 +107,7 @@ class TetrisClientV1:
                             }
                         )
 
-        # remove any duplicate permutations
-        perm_board_states = [q["board"].board for q in permutations]
-        return [
-            p
-            for i, p in enumerate(permutations)
-            if not p["board"].board in perm_board_states[:i:]
-        ]
+        return permutations
 
 
 if __name__ == "__main__":
@@ -109,7 +130,6 @@ if __name__ == "__main__":
                 quit()
 
         win.fill("gray")
-        print(client.board.saved_piece)
 
         client.move()
         client.update()
