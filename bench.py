@@ -1,9 +1,11 @@
 from multiprocessing import Pool
+import random
 from main import Board
 from client import TetrisClient
 
 
 def test(index):
+    random.seed(index)
     board = Board()
     client = TetrisClient(board)
     while not board.defeated:
@@ -13,7 +15,5 @@ def test(index):
 
 
 if __name__ == "__main__":
-
-    with Pool(20) as pool:
-        results = pool.map(test, range(20))
-        print(sum(results) / len(results))
+    with Pool(8) as pool:
+        pool.map(test, range(16))

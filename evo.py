@@ -1,5 +1,5 @@
-# Best weights: [0.53431391, 0.07442817, 1.00553106, 1.24080832]
-# Best score: 306334.6666666667
+# Best weights: [1.58865303 0.3142535  1.24303428 0.81636418]
+# Best score: 250132.4
 
 import pygad
 import random
@@ -18,7 +18,7 @@ def fitness(weights, solution_idx):
     seed = random.random()
     random.seed(seed)
     scores = []
-    for _ in range(3):
+    for _ in range(15):
         bot = TetrisClient(Board(), weights)
         while not bot.board.defeated:
             bot.move()

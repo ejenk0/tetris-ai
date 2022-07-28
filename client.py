@@ -1,4 +1,5 @@
 from multiprocessing import Pool
+import random
 from typing import Sequence
 
 
@@ -6,12 +7,11 @@ class TetrisClient:
     def __init__(
         self,
         board,
-        weights: Sequence[float] = [0.53431391, 0.07442817, 1.00553106, 1.24080832],
+        weights: Sequence[float] = [1.58865303, 0.3142535, 1.24303428, 0.81636418],
+        # weights: Sequence[float] = [1.588, 0.45, 1.243, 0.816],
+        # weights: Sequence[float] = [0.000000001, 1, 0, 1],
     ):
-        if any(weights) != None:
-            self.weights = weights
-        else:
-            self.weights = [1, 1, 1, 1]
+        self.weights = weights
         self.board = board
 
     def update(self, tick: bool = False):
@@ -44,11 +44,11 @@ class TetrisClient:
             # return best["moves"]
 
             perms.sort(
-                key=lambda perm: 1
-                * (perm["board"].score * self.weights[0])
-                / ((perm["board"].count_holes()) * self.weights[1] + 1)
-                / ((perm["board"].get_height()) * self.weights[2] + 1)
-                / ((max(perm["board"].count_wells(), 1) - 1) * self.weights[3] + 1),
+                key=lambda perm: perm["board"].defeated
+                * ((perm["board"].score * self.weights[0]))
+                / ((perm["board"].count_holes() * self.weights[1]) + 1)
+                / ((perm["board"].get_height() * self.weights[2]) + 1)
+                / (((max(perm["board"].count_wells(), 1) - 1) * self.weights[3]) + 1),
                 reverse=True,
             )
             return perms[0]["moves"]

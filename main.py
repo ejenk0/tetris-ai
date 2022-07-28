@@ -55,7 +55,24 @@ class Board(pg.sprite.Sprite):
                 "colour": pg.Color("yellow"),
             },
         }
-        # self.pieces = {"DOT": {"shape": [[0, 1, 0]], "colour": "cyan"}}
+
+        # self.pieces = {
+        #     "DOT": {
+        #         "symmetery": 2,
+        #         "shape": [[0, 1, 0], [0, 1, 0], [0, 1, 0]],
+        #         "colour": "cyan",
+        #     },
+        #     "ARCH": {
+        #         "symmetery": 4,
+        #         "shape": [[0, 1, 1], [0, 1, 0], [0, 1, 1]],
+        #         "colour": "orange",
+        #     },
+        #     "BITS": {
+        #         "symmetery": 4,
+        #         "shape": [[1, 0, 0], [1, 0, 1], [0, 0, 1]],
+        #         "colour": "purple",
+        #     },
+        # }
         self.width = width
         self.height = height
         self.board: list[list[pg.Color | None]]
@@ -357,6 +374,7 @@ class Board(pg.sprite.Sprite):
                 self.active_coords = rotated_piece
 
     def pick_next_piece(self):
+        # random.seed(1 * self.total_pieces)
         self.next_piece = random.choice(list(self.pieces.values()))
 
     def spawn(self, piece: dict):
@@ -574,6 +592,11 @@ if __name__ == "__main__":
                     paused = not paused
                 elif not paused:
                     BOARD.input(event.key)
+                if event.key == pg.K_DOWN:
+                    speed = 50
+            if event.type == pg.KEYUP:
+                if event.key == pg.K_DOWN:
+                    speed = 500
 
         WIN.fill("gray")
         # print(BOARD.get_height())
